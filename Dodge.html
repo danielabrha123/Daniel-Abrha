@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Dodge (Mobile Friendly)</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:#0b1020;
+      color:#fff;
+      min-height:100vh;
+      display:flex;
+      justify-content:center;
+      align-items:flex-start;
+      padding: 14px;
+    }
+
+    .wrap{
+      width: min(980px, 100%);
+      display:grid;
+      gap:12px;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .panel{
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    .scoreline{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+      align-items:baseline;
+      font-variant-numeric: tabular-nums;
+    }
+    .score { font-weight:800; }
+
+    /* Canvas responsive: keep drawing resolution in JS; CSS makes it scale */
+    .gamebox{
+      position:relative;
+      border-radius: 14px;
+      overflow:hidden;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: radial-gradient(circle at 50% 30%, rgba(120,160,255,0.18), transparent 55%), #070b18;
+    }
+
+    canvas{
+      display:block;
+      width:100%;
+      height:auto;
+      aspect-ratio: 16 / 9;
+      touch-action: none; /* prevent page scroll gestures interfering with touch controls */
+      background: transparent;
+    }
+
+    .help{
+      color: rgba(255,255,255,0.85);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .controlsRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    button{
+      cursor:pointer;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-weight: 700;
+      touch-action: manipulation;
+    }
+    button:active{ background: rgba(255,255,255,0.12); }
+    button:disabled{
+      opacity:0.55;
+      cursor:not-allowed;
+    }
+
+    /* Touch on-screen controls */
+    .touchControls{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+    .touchBtn{
+      padding: 16px 12px;
+      font-size: 16px;
+      text-align:center;
+      user-select:none;
+      -webkit-user-select:none;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .touchBtn.active{
+      background: rgba(77,212,255,0.22);
+      border-color: rgba(77,212,255,0.45);
+    }
+
+    /* Overlay modal */
+    .overlay{
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(0,0,0,0.55);
+      padding: 16px;
+      z-index: 10;
+    }
+    .overlay.show{ display: grid; }
+    .modal{
+      width: min(520px, 100%);
+      background: rgba(20,26,48,0.95);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.5);
+    }
+    .modal h2{ margin:0 0 8px; }
+    .modal p{ margin:0 0 14px; color: rgba(255,255,255,0.85); }
+    .actions{ display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="panel scoreline">
+        <div>Score: <span id="score" class="score">0</span></div>
+        <div>High: <span id="highScore" class="score">0</span></div>
+      </div>
+
+      <div class="controlsRow">
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="startBtn">Start</button>
+          <button id="pauseBtn" disabled>Pause</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gamebox">
+      <canvas id="game" aria-label="Dodge game canvas"></canvas>
+    </div>
+
+    <div class="panel help">
+      Desktop: ←/→ or A/D. Mobile: tap/hold the left/right buttons, or swipe left/right on the game.
+    </div>
+
+    <div class="touchControls" aria-label="Touch controls">
+      <div class="touchBtn" id="leftBtn">◀ Left</div>
+      <div class="touchBtn" id="rightBtn">Right ▶</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2 id="modalTitle">Game Over</h2>
+      <p id="modalText">You hit an enemy.</p>
+      <div class="actions">
+        <button id="restartBtn">Restart</button>
+        <button id="closeBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('highScore');
+
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    const overlay = document.getElementById('overlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalText = document.getElementById('modalText');
+    const restartBtn = document.getElementById('restartBtn');
+    const closeBtn = document.getElementById('closeBtn');
+
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
+
+    // Game "world" size (we will set these based on actual canvas pixels)
+    let W = 960, H = 540, DPR = 1;
+
+    const PLAYER = {
+      w: 46,
+      h: 18,
+      x: 0,
+      y: 0,
+      speed: 520
+    };
+
+    const ENEMY = {
+      w: 28,
+      h: 16,
+      minSpeed: 170,
+      maxSpeed: 420,
+      spawnEveryMs: 650,
+      gapMsDecrease: 30,
+      minSpawnEveryMs: 240
+    };
+
+    let keys = { left: false, right: false };
+    let running = false;
+    let paused = false;
+    let lastTime = 0;
+
+    let score = 0;
+    let highScore = 0;
+    let enemies = [];
+    let spawnTimer = 0;
+
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+    function rand(min, max){ return min + Math.random() * (max - min); }
+
+    function aabb(ax, ay, aw, ah, bx, by, bw, bh){
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    function roundRect(c, x, y, w, h, r){
+      const rr = Math.min(r, w / 2, h / 2);
+      c.beginPath();
+      c.moveTo(x + rr, y);
+      c.arcTo(x + w, y, x + w, y + h, rr);
+      c.arcTo(x + w, y + h, x, y + h, rr);
+      c.arcTo(x, y + h, x, y, rr);
+      c.arcTo(x, y, x + w, y, rr);
+      c.closePath();
+    }
+
+    function resizeCanvas(){
+      // Make it crisp on mobile while keeping CSS aspect ratio.
+      DPR = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+
+      const rect = canvas.getBoundingClientRect();
+      const cssW = Math.max(320, rect.width);
+      const cssH = Math.round(cssW * 9 / 16);
+
+      canvas.style.height = cssH + 'px';
+
+      W = Math.round(cssW * DPR);
+      H = Math.round(cssH * DPR);
+
+      canvas.width = W;
+      canvas.height = H;
+
+      // Scale player/enemy sizes slightly with DPR/canvas size (keeps consistent feel)
+      // Base sizes were for 960x540. We scale proportionally by canvas width ratio.
+      const sx = (W / DPR) / 960;
+      PLAYER.w = 46 * sx;
+      PLAYER.h = 18 * sx;
+      PLAYER.y = H / DPR - 45 * sx; // use logical y at DPR space
+      PLAYER.speed = 520 * sx;
+      ENEMY.w = 28 * sx;
+      ENEMY.h = 16 * sx;
+      ENEMY.minSpeed = 170 * sx;
+      ENEMY.maxSpeed = 420 * sx;
+    }
+
+    // Logical coordinate system: we draw using DPR-adjusted pixels directly,
+    // but to keep math simple we’ll treat positions in "canvas pixels".
+    function resetGame(){
+      running = true;
+      paused = false;
+      lastTime = performance.now();
+
+      score = 0;
+      scoreEl.textContent = '0';
+
+      enemies = [];
+      spawnTimer = 0;
+
+      PLAYER.x = W / 2 - PLAYER.w / 2;
+      PLAYER.y = H - (45 * (W / 960)); // recompute based on current scale
+
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      pauseBtn.textContent = 'Pause';
+
+      overlay.classList.remove('show');
+    }
+
+    function showGameOver(){
+      highScore = Math.max(highScore, score);
+      highScoreEl.textContent = String(highScore);
+
+      running = false;
+      paused = false;
+      pauseBtn.disabled = true;
+      pauseBtn.textContent = 'Pause';
+
+      modalTitle.textContent = 'Game Over';
+      modalText.textContent = `Final score: ${score}. Hit an enemy.`;
+      overlay.classList.add('show');
+    }
+
+    function spawnEnemy(){
+      const x = rand(20, W - 20 - ENEMY.w);
+      const y = -ENEMY.h - 10;
+      const t = Math.min(1, score / 500);
+      const speed = rand(ENEMY.minSpeed, ENEMY.maxSpeed) * (0.7 + 0.6 * t);
+      enemies.push({ x, y, w: ENEMY.w, h: ENEMY.h, vy: speed });
+    }
+
+    function update(dt){
+      if (!running || paused) return;
+
+      const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      PLAYER.x += dir * PLAYER.speed * dt;
+      PLAYER.x = clamp(PLAYER.x, 10, W - 10 - PLAYER.w);
+
+      const currentSpawn = Math.max(
+        ENEMY.minSpawnEveryMs,
+        ENEMY.spawnEveryMs - (score * ENEMY.gapMsDecrease) / 200
+      );
+
+      spawnTimer += dt * 1000;
+      while (spawnTimer >= currentSpawn){
+        spawnTimer -= currentSpawn;
+        spawnEnemy();
+      }
+
+      for (let i = enemies.length - 1; i >= 0; i--){
+        const e = enemies[i];
+        e.y += e.vy * dt;
+
+        if (e.y > H + 20){
+          enemies.splice(i, 1);
+          score += 10;
+          scoreEl.textContent = String(score);
+          continue;
+        }
+
+        if (aabb(PLAYER.x, PLAYER.y, PLAYER.w, PLAYER.h, e.x, e.y, e.w, e.h)){
+          showGameOver();
+          return;
+        }
+      }
+    }
+
+    function draw(){
+      ctx.clearRect(0, 0, W, H);
+
+      // Background grid
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = '#7aa2ff';
+      ctx.lineWidth = 1 * DPR;
+
+      const step = Math.round(45 * (W / 960) ); // scales with size
+      for (let y = 0; y < H; y += step){
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Player
+      ctx.fillStyle = '#4dd4ff';
+      roundRect(ctx, PLAYER.x, PLAYER.y, PLAYER.w, PLAYER.h, 8 * (W / 960));
+      ctx.fill();
+
+      // Enemies
+      for (const e of enemies){
+        ctx.fillStyle = '#ff4d6d';
+        roundRect(ctx, e.x, e.y, e.w, e.h, 6 * (W / 960));
+        ctx.fill();
+      }
+
+      // HUD
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = `${14 * (W / 960)}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+      ctx.fillText('DODGE!', 14 * (W / 960), 26 * (W / 960));
+
+      if (paused){
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = `${28 * (W / 960)}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+        ctx.fillText('Paused', W / 2, H / 2);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function loop(now){
+      const dt = Math.min(0.033, (now - lastTime) / 1000);
+      lastTime = now;
+
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function togglePause(){
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    }
+
+    // Desktop keyboard
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'arrowleft' || k === 'a') keys.left = true;
+      if (k === 'arrowright' || k === 'd') keys.right = true;
+
+      if ((k === 'p' || k === 'escape') && running) togglePause();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'arrowleft' || k === 'a') keys.left = false;
+      if (k === 'arrowright' || k === 'd') keys.right = false;
+    });
+
+    // Touch button hold
+    function setTouch(dir, on){
+      if (dir === 'left'){
+        keys.left = on;
+        leftBtn.classList.toggle('active', on);
+      } else {
+        keys.right = on;
+        rightBtn.classList.toggle('active', on);
+      }
+    }
+
+    function bindHold(btnEl, dir){
+      const onDown = (e) => {
+        e.preventDefault();
+        setTouch(dir, true);
+      };
+      const onUp = (e) => {
+        e.preventDefault();
+        setTouch(dir, false);
+      };
+
+      btnEl.addEventListener('pointerdown', onDown, { passive: false });
+      btnEl.addEventListener('pointerup', onUp, { passive: false });
+      btnEl.addEventListener('pointercancel', onUp, { passive: false });
+      btnEl.addEventListener('pointerleave', onUp, { passive: false });
+    }
+
+    bindHold(leftBtn, 'left');
+    bindHold(rightBtn, 'right');
+
+    // Swipe left/right on the canvas
+    let swipeActive = false;
+    let touchStartX = 0;
+
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      swipeActive = true;
+      touchStartX = e.clientX;
+
+      // If user taps, start movement depending on position.
+      // (This helps when swipe is minimal.)
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x < rect.width / 2) setTouch('left', true);
+      else setTouch('right', true);
+    }, { passive: false });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!swipeActive) return;
+      const dx = e.clientX - touchStartX;
+
+      // Clear and re-apply based on swipe direction
+      if (dx < -18){
+        setTouch('left', true);
+        setTouch('right', false);
+      } else if (dx > 18){
+        setTouch('right', true);
+        setTouch('left', false);
+      }
+    }, { passive: false });
+
+    const endSwipe = (e) => {
+      if (!swipeActive) return;
+      swipeActive = false;
+      setTouch('left', false);
+      setTouch('right', false);
+    };
+    canvas.addEventListener('pointerup', endSwipe, { passive: false });
+    canvas.addEventListener('pointercancel', endSwipe, { passive: false });
+    canvas.addEventListener('pointerleave', endSwipe, { passive: false });
+
+    // Buttons
+    startBtn.addEventListener('click', resetGame);
+    pauseBtn.addEventListener('click', togglePause);
+
+    restartBtn.addEventListener('click', resetGame);
+    closeBtn.addEventListener('click', () => {
+      overlay.classList.remove('show');
+      running = false;
+      paused = false;
+      pauseBtn.disabled = true;
+      startBtn.disabled = false;
+    });
+
+    // Init
+    function init(){
+      resizeCanvas();
+      // Place player roughly at bottom center
+      PLAYER.x = W / 2 - PLAYER.w / 2;
+      PLAYER.y = H - (45 * (W / 960));
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', () => {
+      // keep it smooth: just resize and redraw
+      resizeCanvas();
+      // keep player within bounds after resize
+      PLAYER.x = clamp(PLAYER.x, 10, W - 10 - PLAYER.w);
+      PLAYER.y = H - (45 * (W / 960));
+      draw();
+    });
+
+    init();
+  </script>
+</body>
+</html>

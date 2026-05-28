@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Advanced Racing Game</title>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    background:#111;
+    overflow:hidden;
+    touch-action:none;
+    font-family:Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+}
+
+.game-wrapper{
+    width:100%;
+    max-width:500px;
+    height:100vh;
+    position:relative;
+    overflow:hidden;
+    background:#333;
+}
+
+.game-area{
+    width:100%;
+    height:100%;
+    position:relative;
+    overflow:hidden;
+}
+
+.road-line{
+    position:absolute;
+    width:8px;
+    height:120px;
+    background:white;
+    left:50%;
+    transform:translateX(-50%);
+}
+
+.player{
+    position:absolute;
+    width:70px;
+    height:120px;
+    background:linear-gradient(red,darkred);
+    border-radius:15px;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    box-shadow:0 0 20px red;
+}
+
+.enemy{
+    position:absolute;
+    width:70px;
+    height:120px;
+    background:linear-gradient(yellow,orange);
+    border-radius:15px;
+    box-shadow:0 0 20px yellow;
+}
+
+.ui{
+    position:absolute;
+    top:10px;
+    left:10px;
+    z-index:100;
+    color:white;
+    font-size:22px;
+    font-weight:bold;
+}
+
+.highscore{
+    margin-top:10px;
+}
+
+.controls{
+    position:absolute;
+    bottom:20px;
+    width:100%;
+    display:flex;
+    justify-content:space-between;
+    padding:0 20px;
+    z-index:200;
+}
+
+.btn{
+    width:90px;
+    height:90px;
+    border:none;
+    border-radius:50%;
+    font-size:40px;
+    background:rgba(255,255,255,0.15);
+    color:white;
+    backdrop-filter:blur(5px);
+}
+
+.btn:active{
+    transform:scale(0.92);
+}
+
+.game-over{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    color:white;
+    text-align:center;
+    z-index:500;
+}
+
+.game-over h1{
+    font-size:50px;
+    margin-bottom:20px;
+}
+
+.game-over button{
+    padding:15px 30px;
+    border:none;
+    border-radius:10px;
+    background:limegreen;
+    color:white;
+    font-size:20px;
+}
+
+@media(max-width:600px){
+
+    .player,
+    .enemy{
+        width:55px;
+        height:100px;
+    }
+
+    .btn{
+        width:80px;
+        height:80px;
+        font-size:35px;
+    }
+
+    .ui{
+        font-size:18px;
+    }
+}
+
+</style>
+</head>
+<body>
+
+<div class="game-wrapper">
+
+    <div class="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div class="highscore">High Score: <span id="high">0</span></div>
+    </div>
+
+    <div class="game-area" id="gameArea">
+
+        <div class="player" id="player"></div>
+
+    </div>
+
+    <div class="controls">
+        <button class="btn" id="leftBtn">⬅</button>
+        <button class="btn" id="rightBtn">➡</button>
+    </div>
+
+</div>
+
+<script>
+
+const gameArea = document.getElementById("gameArea");
+const player = document.getElementById("player");
+const scoreText = document.getElementById("score");
+const highText = document.getElementById("high");
+const leftBtn = document.getElementById("leftBtn");
+const rightBtn = document.getElementById("rightBtn");
+
+let gameWidth;
+let gameHeight;
+
+function resizeGame(){
+    gameWidth = gameArea.offsetWidth;
+    gameHeight = gameArea.offsetHeight;
+}
+
+resizeGame();
+window.addEventListener("resize", resizeGame);
+
+let score = 0;
+let speed = 6;
+let running = true;
+
+let highScore = localStorage.getItem("highscore") || 0;
+highText.innerText = highScore;
+
+const playerData = {
+    x: gameWidth / 2 - 35,
+    y: gameHeight - 150,
+    width:70,
+    height:120,
+    speed:8
+};
+
+player.style.left = playerData.x + "px";
+
+const enemies = [];
+const lines = [];
+
+function createRoadLines(){
+
+    for(let i=0;i<8;i++){
+
+        const line = document.createElement("div");
+        line.classList.add("road-line");
+
+        line.y = i * 150;
+
+        line.style.top = line.y + "px";
+
+        gameArea.appendChild(line);
+
+        lines.push(line);
+    }
+}
+
+createRoadLines();
+
+function moveRoad(){
+
+    lines.forEach(line=>{
+
+        line.y += speed;
+
+        if(line.y > gameHeight){
+            line.y = -150;
+        }
+
+        line.style.top = line.y + "px";
+    });
+}
+
+function createEnemy(){
+
+    const enemy = document.createElement("div");
+    enemy.classList.add("enemy");
+
+    const lanes = [20, gameWidth/2 - 35, gameWidth - 90];
+
+    enemy.x = lanes[Math.floor(Math.random()*lanes.length)];
+    enemy.y = -150;
+
+    enemy.style.left = enemy.x + "px";
+    enemy.style.top = enemy.y + "px";
+
+    gameArea.appendChild(enemy);
+
+    enemies.push(enemy);
+}
+
+setInterval(()=>{
+
+    if(running){
+        createEnemy();
+    }
+
+},1200);
+
+function moveEnemies(){
+
+    enemies.forEach((enemy,index)=>{
+
+        enemy.y += speed;
+
+        enemy.style.top = enemy.y + "px";
+
+        if(enemy.y > gameHeight){
+
+            enemy.remove();
+            enemies.splice(index,1);
+
+            score++;
+            scoreText.innerText = score;
+
+            if(score > highScore){
+                highScore = score;
+                localStorage.setItem("highscore", highScore);
+                highText.innerText = highScore;
+            }
+
+            if(score % 5 === 0){
+                speed += 0.5;
+            }
+        }
+
+        if(checkCollision(player,enemy)){
+            gameOver();
+        }
+    });
+}
+
+function checkCollision(a,b){
+
+    const aRect = a.getBoundingClientRect();
+    const bRect = b.getBoundingClientRect();
+
+    return !(
+        aRect.bottom < bRect.top ||
+        aRect.top > bRect.bottom ||
+        aRect.right < bRect.left ||
+        aRect.left > bRect.right
+    );
+}
+
+function updatePlayer(){
+
+    if(playerData.x < 0){
+        playerData.x = 0;
+    }
+
+    if(playerData.x > gameWidth - playerData.width){
+        playerData.x = gameWidth - playerData.width;
+    }
+
+    player.style.left = playerData.x + "px";
+}
+
+let leftPressed = false;
+let rightPressed = false;
+
+function gameLoop(){
+
+    if(!running) return;
+
+    moveRoad();
+    moveEnemies();
+
+    if(leftPressed){
+        playerData.x -= playerData.speed;
+    }
+
+    if(rightPressed){
+        playerData.x += playerData.speed;
+    }
+
+    updatePlayer();
+
+    requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+
+// Keyboard Controls
+
+document.addEventListener("keydown",e=>{
+
+    if(e.key === "ArrowLeft"){
+        leftPressed = true;
+    }
+
+    if(e.key === "ArrowRight"){
+        rightPressed = true;
+    }
+});
+
+document.addEventListener("keyup",e=>{
+
+    if(e.key === "ArrowLeft"){
+        leftPressed = false;
+    }
+
+    if(e.key === "ArrowRight"){
+        rightPressed = false;
+    }
+});
+
+// Mobile Touch Controls
+
+leftBtn.addEventListener("touchstart",()=>{
+    leftPressed = true;
+});
+
+leftBtn.addEventListener("touchend",()=>{
+    leftPressed = false;
+});
+
+rightBtn.addEventListener("touchstart",()=>{
+    rightPressed = true;
+});
+
+rightBtn.addEventListener("touchend",()=>{
+    rightPressed = false;
+});
+
+// Mouse Controls
+
+leftBtn.addEventListener("mousedown",()=>{
+    leftPressed = true;
+});
+
+leftBtn.addEventListener("mouseup",()=>{
+    leftPressed = false;
+});
+
+rightBtn.addEventListener("mousedown",()=>{
+    rightPressed = true;
+});
+
+rightBtn.addEventListener("mouseup",()=>{
+    rightPressed = false;
+});
+
+function gameOver(){
+
+    running = false;
+
+    const over = document.createElement("div");
+    over.classList.add("game-over");
+
+    over.innerHTML = `
+        <h1>GAME OVER</h1>
+        <h2>Score: ${score}</h2>
+        <br>
+        <button onclick="location.reload()">Restart</button>
+    `;
+
+    gameArea.appendChild(over);
+}
+
+</script>
+
+</body>
+</html>
