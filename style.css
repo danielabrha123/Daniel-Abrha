@@ -154,9 +154,13 @@ footer{
   margin-bottom:50px;
   color:#38bdf8;
 }
-.about p{
-    line-height:1.8;
-    margin-bottom:15px;
+.about1 , .home p,.contact p{
     font-family: Times New Roman;
+    margin-bottom:15px;
     color: #eee;
+font-size: clamp(0.9rem, 4vw, 1.1rem); line-height: 1.6;
+   margin: 20px auto; 
+   max-width: 800px; 
+   padding: 0 15px; 
+   text-align: justify;">
 }
